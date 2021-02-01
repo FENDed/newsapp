@@ -6,8 +6,5 @@ target 'newsapp' do
   use_frameworks!
 
   # Pods for newsapp
-	pod 'Alamofire', '5.2'
-	pod 'AlamofireImage', '4.1'
-    pod 'Firebase/Core'
-    pod 'Firebase/Database'
+    pod 'RealmSwift'
 end

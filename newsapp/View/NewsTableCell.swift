@@ -7,18 +7,20 @@
 //
 
 import UIKit
-import Alamofire
-import AlamofireImage
+
 
 class NewsTableCell: UITableViewCell {
     
-    var newsImage = UIImageView()
+    var newsImage = CustomImageView()
     var newsTitle = UILabel()
     var newsDescription = UILabel()
     var newsPublishDate = UILabel()
+    
+    
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
+        
         
         addSubview(newsImage)
         addSubview(newsTitle)
@@ -42,8 +44,9 @@ class NewsTableCell: UITableViewCell {
     }
 
     func set(news: ApiNews) {
-        if let imageData = NSURL(string: news.urlToImage ?? "https://bhby.io.activecloud.com/8971091311/800x800/DETAIL_PICTURE.jpg") {
-            newsImage.af.setImage(withURL: imageData as URL)
+        newsImage.image = UIImage(named: "no-image")
+        if let urlString = news.urlToImage, let url = URL(string: urlString) {
+            newsImage.loadImage(from: url)
         }
         
         newsTitle.text = news.title

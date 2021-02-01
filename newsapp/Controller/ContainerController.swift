@@ -6,11 +6,11 @@
 //
 
 import UIKit
-
+import LocalAuthentication
+import CoreLocation
 
 class ContainerController: UIViewController, UITableViewDelegate, UITableViewDataSource, UISearchBarDelegate {
     
-
     
     var menuController: MenuController!
     var centerController: UIViewController!
@@ -19,6 +19,7 @@ class ContainerController: UIViewController, UITableViewDelegate, UITableViewDat
     let id = "tableCell"
     var newsTableView = UITableView()
     let homeController = HomeController()
+    let onBoardingViewController = OnBoardingViewController()
     
     var isExpanded = false
     var newsData: [ApiNews] = []
@@ -30,13 +31,28 @@ class ContainerController: UIViewController, UITableViewDelegate, UITableViewDat
         super.viewDidLoad()
         
         NotificationCenter.default.addObserver(self, selector: #selector(reloadTableView(noti:)), name: Notification.Name("reloadTableView"), object: nil)
-        
+        UserDefaults.standard.setValue(false, forKey: "isAuth")
+
+        loadSettings()
         configureHomeController()
         newsData = fetchData()
         configureSearchBar()
         configureScrollView()
         configureNewsTableView()
         
+        
+        if !UserDefaults.standard.bool(forKey: "isNewUser") {
+            view.addSubview(onBoardingViewController.view)
+            
+            let countryCode = Locale.current.regionCode
+            if countryCode == nil {
+                Api.country = "ru"
+            } else {
+                Api.country = countryCode ?? ""
+            }
+            
+            UserDefaults.standard.setValue(true, forKey: "isSwitchOn")
+        }
     }
     
     
@@ -52,11 +68,20 @@ class ContainerController: UIViewController, UITableViewDelegate, UITableViewDat
         return isExpanded
     }
     
+    func loadSettings() {
+        Api.country = UserDefaults.standard.string(forKey: "country") ?? ""
+        Api.source = UserDefaults.standard.string(forKey: "source") ?? ""
+    }
+    
     func configureSearchBar() {
         searchBar.delegate = self
         view.addSubview(searchBar)
         
         addConstraintsOnSearchBar()
+    }
+    
+    func searchBarTextDidEndEditing(_ searchBar: UISearchBar) {
+        fetchData()
     }
     
     func addConstraintsOnSearchBar() {
@@ -136,8 +161,11 @@ class ContainerController: UIViewController, UITableViewDelegate, UITableViewDat
     
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = tableView.dequeueReusableCell(withIdentifier: id) as! NewsTableCell
-        let someNews = newsData[indexPath.row]
-        cell.set(news: someNews)
+        if newsData.count != 0 {
+            let someNews = newsData[indexPath.row]
+            cell.set(news: someNews)
+        }
+
         
         return cell
     }
@@ -170,7 +198,6 @@ class ContainerController: UIViewController, UITableViewDelegate, UITableViewDat
     
     func configureMenuController() {
         if menuController == nil {
-            // add menu controller
             menuController = MenuController()
             menuController.delegate = self
             view.insertSubview(menuController.view, at: 0)
@@ -200,14 +227,18 @@ class ContainerController: UIViewController, UITableViewDelegate, UITableViewDat
         }
         
         animateStatusBar()
-
     }
     
     func didSelectMenuOption(menuOption: MenuOption) {
         switch menuOption {
         case .BookMarks:
-            let controller = BookMarksController()
-            presentInFullScreen(UINavigationController(rootViewController: controller), animated: true, completion: nil)
+            if UserDefaults.standard.bool(forKey: "isAuth") || UserDefaults.standard.string(forKey: "bookmarksPassword")?.count ?? 0 == 0 {
+                let controller = BookMarksController()
+                presentInFullScreen(UINavigationController(rootViewController: controller), animated: true, completion: nil)
+            } else {
+                faceIdCheck()
+            }
+            
         case .Settings:
             let controller = SettingsController()
             presentInFullScreen(UINavigationController(rootViewController: controller), animated: true, completion: nil)
@@ -220,13 +251,64 @@ class ContainerController: UIViewController, UITableViewDelegate, UITableViewDat
         }, completion: nil)
     }
     
+    func faceIdCheck() {
+        let context = LAContext()
+                var error: NSError?
+                if context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) {
+                    let reason = "Please, allow to use your biometrics"
+                    context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason) { [weak self] success, error in
+                        guard let self = self else { return }
+                        DispatchQueue.main.async {
+                            if success {
+                                UserDefaults.standard.setValue(true, forKey: "isAuth")
+                                let controller = BookMarksController()
+                                self.presentInFullScreen(UINavigationController(rootViewController: controller), animated: true, completion: nil)
+                            } else {
+                                self.configureEnterPassword()
+                            }
+                        }
+                    }
+                } else {
+                    self.configureEnterPassword()
+        }
+    }
+    
+    func configureEnterPassword() {
+        let enterPasswordAlertController = UIAlertController(title: "Enter your password", message: nil, preferredStyle: .alert)
+        enterPasswordAlertController.addTextField { (textfield) in
+            textfield.isSecureTextEntry = true
+            enterPasswordAlertController.addAction(UIAlertAction(title: "Cancel", style: .destructive, handler: nil))
+            enterPasswordAlertController.addAction(UIAlertAction(title: "Confirm", style: .default, handler: { (confirm) in
+                let userinput = enterPasswordAlertController.textFields?.first
+                if userinput?.text ?? "" == UserDefaults.standard.string(forKey: "bookmarksPassword") {
+                    let successAlertController = UIAlertController(title: "You're logged in", message: nil, preferredStyle: .alert)
+                    successAlertController.addAction(UIAlertAction(title: "OK", style: .default, handler: { (alert) in
+                        let controller = BookMarksController()
+                        self.presentInFullScreen(UINavigationController(rootViewController: controller), animated: true, completion: nil)
+                        
+                    }))
+                    self.present(successAlertController, animated: true, completion: nil)
+                    UserDefaults.standard.setValue(true, forKey: "isAuth")
+                }else {
+                    let errorAlertController = UIAlertController(title: "Error: password isn't correct", message: nil, preferredStyle: .alert)
+                    errorAlertController.addAction(UIAlertAction(title: "OK", style: .cancel, handler: nil))
+                    self.present(errorAlertController, animated: true, completion: nil)
+                }
+            }))
+        }
+        self.present(enterPasswordAlertController, animated: true, completion: nil)
+    }
+    
     @objc func reloadTableView(noti: Notification) {
         fetchData()
+        newsData = []
     }
     
     @objc func buttonGetNewsFromCategory(sender: UIButton!) {
+        Api.page = 1
         Api.category = sender.titleLabel?.text ?? ""
         fetchData()
+        newsData = []
     }
 }
 
@@ -244,11 +326,11 @@ extension ContainerController: HomeControllerDelegate {
 }
 
 extension ContainerController {
-    func fetchData() -> [ApiNews] {
-        let apiUrl = "https://newsapi.org/v2/\(Api.newsType)?apiKey=\(Api.apiKey)&category=\(Api.newsType == "everything" ? "" : Api.category)&country=\(Api.newsType == "everything" ? "" : (Api.country))&q=\(Api.query)"
+    @discardableResult func fetchData() -> [ApiNews] {
+        let apiUrl = "https://newsapi.org/v2/\(Api.newsType)?apiKey=\(Api.apiKey)&page=\(Api.page)&pageSize=100&category=\(Api.newsType == "everything" ? "" : (Api.source == "" ? Api.category : "" ))&country=\(Api.newsType == "everything" ? "" : (Api.source == "" ? Api.country : ""))&q=\(Api.query)&sources=\(Api.source)"
         getData(from: apiUrl) { (news) in
             DispatchQueue.main.async {
-                self.newsData = news
+                self.newsData.append(contentsOf: news) 
                 self.newsTableView.reloadData()
             }
         }
@@ -257,13 +339,17 @@ extension ContainerController {
     }
     
     func getData(from url: String, comlpletion: @escaping ( [ApiNews] ) -> Void) {
-
-        URLSession.shared.dataTask(with: URL(string: url)!, completionHandler: { data, response, error in
+        
+        guard let encodedString = url.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let url = URL(string: encodedString) else {
+            return
+        }
+        
+        URLSession.shared.dataTask(with: url, completionHandler: { data, response, error in
             guard let data = data, error == nil else {
                 print("Request API error")
                 return
             }
-            print("\(data)\n\n\n")
             
             var result:News?
             do {

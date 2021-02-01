@@ -7,21 +7,29 @@
 //
 
 import UIKit
-import FirebaseDatabase
+import RealmSwift
 
 class BookMarksController: UIViewController, UITableViewDelegate, UITableViewDataSource {
 
     
-    let ref = Database.database().reference()
     var bookmarks = UITableView()
-    var newsData: [[String: Any]] = [[:]]
-    
+    let id = "BookmarkCell"
+    let realm = try! Realm()
+    var bookmarksData: Results<BookmarksRealm>! = nil
     
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        getDataFromDB()
+        bookmarksData = getDataFromDB()
+        NotificationCenter.default.addObserver(self, selector: #selector(reloadBookmarksTableView(noti:)), name: Notification.Name("reloadBookmarksTableView"), object: nil)
+        
         configureView()
+        configureBookmarks()
+    }
+    
+    func getDataFromDB() -> Results<BookmarksRealm> {
+        let results = realm.objects(BookmarksRealm.self)
+        return results
     }
     
     func configureView() {
@@ -31,57 +39,48 @@ class BookMarksController: UIViewController, UITableViewDelegate, UITableViewDat
     }
     
     func configureBookmarks() {
-        bookmarks.register(NewsTableCell.self, forCellReuseIdentifier: "BookmarkCell")
+        bookmarks.register(BookmarksTableCell.self, forCellReuseIdentifier: id)
+        self.view.sendSubviewToBack(bookmarks)
         self.bookmarks.delegate = self
         self.bookmarks.dataSource = self
         
         view.addSubview(bookmarks)
+        
         addConstraintsOnBookmarks()
     }
     
     func addConstraintsOnBookmarks() {
         bookmarks.translatesAutoresizingMaskIntoConstraints = false
-        bookmarks.topAnchor.constraint(equalTo: view.topAnchor).isActive = true
-        bookmarks.leadingAnchor.constraint(equalTo: view.leftAnchor, constant: 10).isActive = true
+        
+        bookmarks.heightAnchor.constraint(equalToConstant: view.frame.height).isActive = true
+        bookmarks.widthAnchor.constraint(equalToConstant: view.frame.width).isActive = true
     }
-    
-//    DataBase functions
-    
-    func getDataFromDB() {
-        ref.child("BookMarks").observeSingleEvent(of: .value) { (snapshot) in
-            let postDict = snapshot.value as? [[String: Any]]
-//            for aValue in postDict {
-//                let title = aValue["title"] as? String
-//
-//            }
-            //newsData = postDict
-        }
-    }
-    
     
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return 55
+        return bookmarksData.count
     }
     
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-//        let cell = tableView.dequeueReusableCell(withIdentifier: id) as! NewsTableCell
-//        let someNews = newsData[indexPath.row]
-//        cell.set(news: someNews)
-        
-        return UITableViewCell()
+        let cell = tableView.dequeueReusableCell(withIdentifier: id) as! BookmarksTableCell
+        cell.set(bookmarksData: bookmarksData, row: indexPath.row)
+        return cell
     }
     
     func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
-        return 210.0
+        return 230
     }
     
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-//        let vc = NewsPageController()
-//        vc.newsData = newsData[indexPath.row]
-//        present(vc, animated: true)
+        let vc = NewsPageController()
+        vc.newsData.url = bookmarksData[indexPath.row].url
+        present(vc, animated: true)
     }
     
     @objc func handleDismiss() {
         dismiss(animated: true, completion: nil)
+    }
+    
+    @objc func reloadBookmarksTableView(noti: Notification) {
+        bookmarks.reloadData()
     }
 }
